@@ -1,0 +1,2 @@
+# discostar
+Discogs Statistics Researcher
