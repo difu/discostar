@@ -1,0 +1,24 @@
+database:
+  sqlite:
+    path: "data/discostar.db"
+  
+discogs:
+  api:
+    base_url: "https://api.discogs.com"
+    rate_limit: 60  # requests per minute
+    user_agent: "discostar/0.1.0"
+  xml_dumps:
+    base_url: "https://discogs-data-dumps.s3-us-west-2.amazonaws.com"
+    artists_file: "discogs_artists.xml.gz"
+    releases_file: "discogs_releases.xml.gz"
+    labels_file: "discogs_labels.xml.gz"
+    masters_file: "discogs_masters.xml.gz"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/discostar.log"
+
+cache:
+  directory: "data/cache"
+  api_cache_ttl: 3600  # seconds
