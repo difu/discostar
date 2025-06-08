@@ -169,3 +169,29 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Project specific
+data/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Azure
+*.publishsettings
