@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import ssl
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -29,13 +30,8 @@ class DiscogsDumpDownloader:
                                                       'https://discogs-data-dumps.s3-us-west-2.amazonaws.com/')
         self.dumps_dir = get_dumps_directory()
         
-        # File mappings
-        self.dump_files = {
-            'artists': 'discogs_artists.xml.gz',
-            'releases': 'discogs_releases.xml.gz',
-            'labels': 'discogs_labels.xml.gz',
-            'masters': 'discogs_masters.xml.gz'
-        }
+        # Dump types
+        self.dump_types = ['artists', 'releases', 'labels', 'masters']
     
     async def download_dump(self, dump_type: str, force_download: bool = False) -> bool:
         """Download a specific dump type.
@@ -47,7 +43,7 @@ class DiscogsDumpDownloader:
         Returns:
             True if download was successful, False otherwise
         """
-        if dump_type not in self.dump_files:
+        if dump_type not in self.dump_types:
             logger.error(f"Unknown dump type: {dump_type}")
             return False
         
@@ -86,59 +82,80 @@ class DiscogsDumpDownloader:
             URL string if found, None otherwise
         """
         try:
-            async with aiohttp.ClientSession() as session:
-                # First, try to get the directory listing
-                async with session.get(self.base_url) as response:
-                    if response.status != 200:
-                        logger.error(f"Failed to access dump directory: {response.status}")
-                        return None
+            # Create SSL context that handles certificate issues
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                # Get the current year first, then check previous year if needed
+                current_year = datetime.now().year
+                years_to_check = [current_year, current_year - 1]
+                
+                for year in years_to_check:
+                    data_url = urljoin(self.base_url, f'data/{year}/')
                     
-                    content = await response.text()
-                    
-                    # Look for the most recent dated file for this dump type
-                    pattern = rf'(\d{{4}})(\d{{2}})(\d{{2}})/{re.escape(self.dump_files[dump_type])}'
-                    matches = re.findall(pattern, content)
-                    
-                    if not matches:
-                        # Fallback: try direct file access with today's date format
-                        from datetime import datetime
-                        today = datetime.now()
-                        for days_back in range(7):  # Try last 7 days
-                            date = today - timedelta(days=days_back)
-                            date_str = date.strftime('%Y%m%d')
-                            test_url = urljoin(self.base_url, f'{date_str}/{self.dump_files[dump_type]}')
-                            
-                            if await self._url_exists(session, test_url):
-                                return test_url
+                    async with session.get(data_url) as response:
+                        if response.status != 200:
+                            logger.debug(f"Failed to access {year} directory: {response.status}")
+                            continue
                         
-                        logger.error(f"No recent {dump_type} dump files found")
-                        return None
+                        content = await response.text()
+                        
+                        # Look for files matching: discogs_YYYYMMDD_[type].xml.gz
+                        pattern = rf'discogs_(\d{{4}})(\d{{2}})(\d{{2}})_{re.escape(dump_type)}\.xml\.gz'
+                        matches = re.findall(pattern, content)
+                        
+                        if matches:
+                            # Sort by date and get the most recent
+                            latest_date = max(matches, key=lambda x: (x[0], x[1], x[2]))
+                            date_str = ''.join(latest_date)
+                            filename = f'discogs_{date_str}_{dump_type}.xml.gz'
+                            
+                            latest_url = urljoin(self.base_url, f'data/{year}/{filename}')
+                            logger.info(f"Found latest {dump_type} dump: {latest_url}")
+                            return latest_url
+                
+                # If no files found in year directories, try direct access for recent dates
+                today = datetime.now()
+                for days_back in range(30):  # Try last 30 days
+                    date = today - timedelta(days=days_back)
+                    year = date.year
+                    date_str = date.strftime('%Y%m%d')
+                    filename = f'discogs_{date_str}_{dump_type}.xml.gz'
+                    test_url = urljoin(self.base_url, f'data/{year}/{filename}')
                     
-                    # Sort by date (year, month, day) and get the most recent
-                    latest_date = max(matches, key=lambda x: (x[0], x[1], x[2]))
-                    date_str = ''.join(latest_date)
-                    
-                    latest_url = urljoin(self.base_url, f'{date_str}/{self.dump_files[dump_type]}')
-                    logger.info(f"Found latest {dump_type} dump: {latest_url}")
-                    return latest_url
+                    if await self._url_exists(test_url):
+                        logger.info(f"Found {dump_type} dump via direct access: {test_url}")
+                        return test_url
+                
+                logger.error(f"No recent {dump_type} dump files found")
+                return None
                     
         except Exception as e:
             logger.error(f"Error finding latest {dump_type} dump URL: {e}")
             return None
     
-    async def _url_exists(self, session: aiohttp.ClientSession, url: str) -> bool:
+    async def _url_exists(self, url: str) -> bool:
         """Check if a URL exists by making a HEAD request.
         
         Args:
-            session: aiohttp session to use
             url: URL to check
             
         Returns:
             True if URL exists, False otherwise
         """
         try:
-            async with session.head(url) as response:
-                return response.status == 200
+            # Create SSL context that handles certificate issues
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                async with session.head(url) as response:
+                    return response.status == 200
         except:
             return False
     
@@ -153,7 +170,12 @@ class DiscogsDumpDownloader:
             True if download was successful, False otherwise
         """
         try:
-            connector = aiohttp.TCPConnector(limit=10)
+            # Create SSL context that handles certificate issues
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(limit=10, ssl=ssl_context)
             timeout = aiohttp.ClientTimeout(total=3600)  # 1 hour timeout
             
             async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -204,9 +226,9 @@ class DiscogsDumpDownloader:
         """
         downloaded = {}
         
-        for dump_type, base_filename in self.dump_files.items():
-            # Look for any files matching the pattern (with date prefix)
-            pattern = f"*{base_filename}"
+        for dump_type in self.dump_types:
+            # Look for any files matching the pattern: discogs_YYYYMMDD_[type].xml.gz
+            pattern = f"discogs_*_{dump_type}.xml.gz"
             matches = list(self.dumps_dir.glob(pattern))
             
             if matches:
