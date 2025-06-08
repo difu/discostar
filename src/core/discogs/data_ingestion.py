@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from ..database.models import Base, Artist, Release, Label, Master, DataSource
 from ..database.database import get_database_url
 from .xml_parser import ArtistXMLParser, ReleaseXMLParser, LabelXMLParser, MasterXMLParser, BaseXMLParser
+from .relationship_processor import get_relationship_processor
 
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,10 @@ class DataIngestionPipeline:
         self.commit_interval = ingestion_config.get('commit_interval', 10000)
         self.max_error_rate = ingestion_config.get('max_error_rate', 0.1)
         self.progress_update_interval = ingestion_config.get('progress_update_interval', 1000)
+        
+        # Relationship processing
+        self.populate_join_tables = ingestion_config.get('populate_join_tables', True)
+        self.relationship_processor = get_relationship_processor() if self.populate_join_tables else None
         
         # Parser mapping
         self.parsers = {
@@ -189,6 +194,13 @@ class DataIngestionPipeline:
             
             # Final commit
             session.commit()
+            
+            # Process relationships for releases if enabled
+            if dump_type == 'releases' and self.relationship_processor:
+                click.echo("Processing relationships (artists, labels, tracks)...")
+                rel_stats = self._process_relationships_for_new_releases(session, total_processed)
+                total_processed += rel_stats.get('releases_processed', 0)
+                session.commit()
             
             # Record the successful ingestion
             self._record_data_source(session, dump_type, file_path, total_processed)
@@ -358,6 +370,56 @@ class DataIngestionPipeline:
         except Exception as e:
             logger.error(f"Error getting collection release IDs: {e}")
             return set()
+        finally:
+            session.close()
+    
+    def _process_relationships_for_new_releases(self, session: Session, batch_size: int = 100) -> Dict[str, int]:
+        """Process relationships for recently ingested releases.
+        
+        Args:
+            session: Database session
+            batch_size: Number of releases to process at once
+            
+        Returns:
+            Dictionary with processing statistics
+        """
+        if not self.relationship_processor:
+            return {}
+        
+        try:
+            # Process all releases (for now - could be optimized to only process recent ones)
+            stats = self.relationship_processor.process_existing_releases(session, batch_size)
+            
+            logger.info(f"Relationship processing complete: {stats}")
+            click.echo(f"✅ Created {stats['artists_created']:,} artist relationships, "
+                      f"{stats['labels_created']:,} label relationships, "
+                      f"{stats['tracks_created']:,} tracks")
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error processing relationships: {e}")
+            return {'errors': 1}
+    
+    def process_existing_relationships(self) -> Dict[str, int]:
+        """Process relationships for all existing releases in the database.
+        
+        Returns:
+            Dictionary with processing statistics
+        """
+        if not self.relationship_processor:
+            logger.warning("Relationship processor not enabled")
+            return {}
+        
+        session = self.SessionLocal()
+        try:
+            stats = self.relationship_processor.process_existing_releases(session)
+            session.commit()
+            return stats
+        except Exception as e:
+            logger.error(f"Error processing existing relationships: {e}")
+            session.rollback()
+            return {'errors': 1}
         finally:
             session.close()
     

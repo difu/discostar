@@ -143,9 +143,9 @@ class Release(Base):
     
     # Relationships
     master = relationship("Master", back_populates="releases")
-    artists = relationship("ReleaseArtist", back_populates="release")
-    labels = relationship("ReleaseLabel", back_populates="release")
-    tracks = relationship("Track", back_populates="release")
+    artist_credits = relationship("ReleaseArtist", back_populates="release")
+    label_credits = relationship("ReleaseLabel", back_populates="release")
+    track_listing = relationship("Track", back_populates="release")
     
     def __repr__(self):
         return f"<Release(id={self.id}, title='{self.title}')>"
@@ -165,7 +165,7 @@ class ReleaseArtist(Base):
     tracks = Column(String)  # Track numbers where artist appears
     
     # Relationships
-    release = relationship("Release", back_populates="artists")
+    release = relationship("Release", back_populates="artist_credits")
     artist = relationship("Artist", back_populates="release_credits")
     
     def __repr__(self):
@@ -182,7 +182,7 @@ class ReleaseLabel(Base):
     catalog_number = Column(String, primary_key=True, default='')
     
     # Relationships
-    release = relationship("Release", back_populates="labels")
+    release = relationship("Release", back_populates="label_credits")
     label = relationship("Label", back_populates="releases")
     
     def __repr__(self):
@@ -202,7 +202,7 @@ class Track(Base):
     type = Column(String)  # "track", "index", "heading"
     
     # Relationships
-    release = relationship("Release", back_populates="tracks")
+    release = relationship("Release", back_populates="track_listing")
     
     def __repr__(self):
         return f"<Track(id={self.id}, title='{self.title}')>"

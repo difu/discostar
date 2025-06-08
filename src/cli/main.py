@@ -453,6 +453,65 @@ def collection_workflow(ctx):
         click.echo(f"❌ Error checking workflow status: {e}")
 
 
+@cli.command('process-relationships')
+@click.pass_context
+def process_relationships(ctx):
+    """Process relationships for existing releases to populate join tables."""
+    config = ctx.obj['config']
+    
+    click.echo("🔗 Processing release relationships...")
+    click.echo("This will populate join tables (release_artists, release_labels, tracks)")
+    click.echo("from existing release JSON data.\n")
+    
+    try:
+        # Get ingestion pipeline
+        pipeline = get_ingestion_pipeline(config)
+        
+        # Check if there are releases to process
+        from ..core.database.models import Release
+        from ..core.database.database import get_database_url
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        
+        database_url = get_database_url(config)
+        engine = create_engine(database_url)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        session = SessionLocal()
+        
+        try:
+            release_count = session.query(Release).count()
+            
+            if release_count == 0:
+                click.echo("❌ No releases found in database. Ingest release data first.")
+                return
+            
+            click.echo(f"📊 Found {release_count:,} releases to process")
+            
+            if not click.confirm("Continue with relationship processing?"):
+                return
+            
+        finally:
+            session.close()
+        
+        # Process relationships
+        stats = pipeline.process_existing_relationships()
+        
+        if stats.get('errors', 0) > 0:
+            click.echo(f"⚠️  Processing completed with {stats['errors']} errors")
+        else:
+            click.echo("✅ Relationship processing completed successfully!")
+            
+        click.echo(f"📊 Results:")
+        click.echo(f"   Releases processed: {stats.get('releases_processed', 0):,}")
+        click.echo(f"   Artist relationships: {stats.get('artists_created', 0):,}")
+        click.echo(f"   Label relationships: {stats.get('labels_created', 0):,}")
+        click.echo(f"   Tracks created: {stats.get('tracks_created', 0):,}")
+        
+    except Exception as e:
+        click.echo(f"❌ Error processing relationships: {e}")
+        sys.exit(1)
+
+
 @cli.command('optimize-db')
 @click.option('--strategy', type=click.Choice(['collection_only', 'all']), 
               help='Set release storage strategy')

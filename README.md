@@ -101,6 +101,57 @@ Tested with Discogs June 2025 XML dumps on a Macbook Pro M4:
 - **Labels**: Estimated 1.5+ million records
 - **Masters**: Estimated 2+ million records
 
+## 🔗 Database Schema & Relationships
+
+DiscoStar uses a normalized database schema with both JSON fields and relational join tables for optimal flexibility:
+
+### Data Storage Approach
+- **JSON Fields**: Store raw Discogs data in JSON format for completeness
+- **Join Tables**: Normalized relationships for efficient queries and analytics
+- **Hybrid Benefits**: Maintains data integrity while enabling complex SQL queries
+
+### Join Tables
+DiscoStar automatically populates join tables during release ingestion:
+
+| Table | Purpose | Example Query |
+|-------|---------|---------------|
+| **`release_artists`** | Artist-release relationships with roles | Find all releases by producer |
+| **`release_labels`** | Label-release relationships with catalog numbers | Group releases by label |
+| **`tracks`** | Individual track listings with positions | Search for specific songs |
+
+### Relationship Processing
+```bash
+# Automatic: Join tables populated during release ingestion
+discostar ingest-data --type releases
+
+# Manual: Process existing releases to populate join tables  
+discostar process-relationships
+
+# Check results
+discostar status  # Shows join table counts
+```
+
+### Query Examples
+With join tables populated, you can run complex analytics:
+
+```sql
+-- Find all releases where Artist X collaborated with Artist Y
+SELECT r.title FROM releases r
+JOIN release_artists ra1 ON r.id = ra1.release_id  
+JOIN release_artists ra2 ON r.id = ra2.release_id
+WHERE ra1.artist_id = 1 AND ra2.artist_id = 2;
+
+-- Count releases by label
+SELECT l.name, COUNT(*) FROM labels l
+JOIN release_labels rl ON l.id = rl.label_id
+GROUP BY l.name ORDER BY COUNT(*) DESC;
+
+-- Find longest tracks in collection
+SELECT r.title, t.title, t.duration FROM tracks t
+JOIN releases r ON t.release_id = r.id
+ORDER BY t.duration DESC LIMIT 10;
+```
+
 ## 💾 Storage Strategy
 
 DiscoStar offers flexible release data management to balance completeness with performance:
@@ -187,6 +238,12 @@ discostar download-dumps --type artists  # Download specific dump type
 discostar ingest-data --type releases    # Import specific data type
 discostar ingest-data --force            # Force re-ingestion
 discostar clear-data --type artists      # Clear specific data type
+
+# Relationship processing (join tables)
+discostar process-relationships          # Populate join tables from release JSON data
+
+# Collection-only workflow guidance
+discostar collection-workflow            # Interactive guide for collection-only setup
 
 # Database optimization (after collection sync)
 discostar optimize-db --clean-unused     # Remove releases not in collections
