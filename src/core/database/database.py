@@ -153,3 +153,28 @@ def reset_database(database_url: Optional[str] = None) -> None:
     db_manager.drop_tables()
     db_manager.create_tables()
     logger.info("Database reset completed")
+
+
+def get_database_url(config: dict) -> str:
+    """Get database URL from configuration.
+    
+    Args:
+        config: Application configuration dictionary
+        
+    Returns:
+        Database URL string
+    """
+    db_config = config.get('database', {})
+    
+    # Check for SQLite configuration
+    sqlite_config = db_config.get('sqlite', {})
+    if sqlite_config:
+        db_path = sqlite_config.get('path', 'data/discostar.db')
+        # Ensure absolute path
+        if not Path(db_path).is_absolute():
+            db_path = Path.cwd() / db_path
+        return f"sqlite:///{db_path}"
+    
+    # Default to SQLite if no configuration found
+    db_path = get_data_directory() / "discostar.db"
+    return f"sqlite:///{db_path}"

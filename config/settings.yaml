@@ -22,3 +22,20 @@ logging:
 cache:
   directory: "data/cache"
   api_cache_ttl: 3600  # seconds
+
+ingestion:
+  batch_size: 1000  # Number of records to process in each batch
+  commit_interval: 10000  # Commit after this many records
+  max_error_rate: 0.1  # Maximum allowable error rate (10%)
+  progress_update_interval: 1000  # Update progress every N records
+  
+  # Release ingestion strategy
+  releases:
+    strategy: "collection_only"  # Options: "all", "collection_only", "selective", "skip"
+    # Note: "collection_only" requires collection data to be synced first
+    # For selective strategy (future):
+    include_masters_releases: true  # Include releases from ingested masters
+    include_artist_releases: false  # Include all releases from collection artists
+    include_label_releases: false   # Include all releases from collection labels
+    max_releases_per_artist: 50     # Limit releases per artist (for discovery)
+    max_releases_per_label: 100     # Limit releases per label
