@@ -257,9 +257,8 @@ class DataIngestionPipeline:
             
             # Check if there's a data source record for this file
             data_source = session.query(DataSource).filter(
-                DataSource.table_name == table_name,
-                DataSource.dump_file == file_path.name,
-                DataSource.source_type == 'xml_dump'
+                DataSource.source_type == dump_type,
+                DataSource.source_name == 'xml_dump'
             ).first()
             
             return data_source is not None
@@ -296,22 +295,29 @@ class DataIngestionPipeline:
             
             # Create or update data source record
             data_source = session.query(DataSource).filter(
-                DataSource.table_name == table_name,
-                DataSource.dump_file == file_path.name
+                DataSource.source_type == dump_type,
+                DataSource.source_name == 'xml_dump'
             ).first()
             
             if data_source:
                 # Update existing record
-                data_source.source_date = source_date
-                data_source.record_id = record_count  # Use as record count
+                data_source.last_updated = datetime.utcnow()
+                data_source.source_metadata = {
+                    'file_path': str(file_path),
+                    'record_count': record_count,
+                    'source_date': source_date.isoformat() if source_date else None
+                }
             else:
                 # Create new record
                 data_source = DataSource(
-                    table_name=table_name,
-                    record_id=record_count,  # Use as record count
-                    source_type='xml_dump',
-                    source_date=source_date,
-                    dump_file=file_path.name
+                    source_type=dump_type,
+                    source_name='xml_dump',
+                    last_updated=datetime.utcnow(),
+                    source_metadata={
+                        'file_path': str(file_path),
+                        'record_count': record_count,
+                        'source_date': source_date.isoformat() if source_date else None
+                    }
                 )
                 session.add(data_source)
             
@@ -336,14 +342,16 @@ class DataIngestionPipeline:
                 
                 # Get data source info
                 data_source = session.query(DataSource).filter(
-                    DataSource.table_name == table_name,
-                    DataSource.source_type == 'xml_dump'
+                    DataSource.source_type == dump_type,
+                    DataSource.source_name == 'xml_dump'
                 ).first()
+                
+                metadata = data_source.source_metadata if data_source else {}
                 
                 status[dump_type] = {
                     'record_count': record_count,
-                    'last_ingestion': data_source.source_date if data_source else None,
-                    'dump_file': data_source.dump_file if data_source else None,
+                    'last_ingestion': data_source.last_updated if data_source else None,
+                    'dump_file': metadata.get('file_path', '').split('/')[-1] if metadata.get('file_path') else None,
                     'ingested': record_count > 0
                 }
         
@@ -378,8 +386,8 @@ class DataIngestionPipeline:
             
             # Delete data source records
             session.query(DataSource).filter(
-                DataSource.table_name == table_name,
-                DataSource.source_type == 'xml_dump'
+                DataSource.source_type == dump_type,
+                DataSource.source_name == 'xml_dump'
             ).delete()
             
             session.commit()

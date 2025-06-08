@@ -48,6 +48,9 @@ class Artist(Base):
     name_variations = Column(JSONField)  # List of name variations
     aliases = Column(JSONField)  # List of aliases
     urls = Column(JSONField)  # List of URLs
+    members = Column(JSONField)  # List of band members
+    groups = Column(JSONField)  # List of groups artist is member of
+    images = Column(JSONField)  # List of images
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -69,8 +72,9 @@ class Label(Base):
     profile = Column(Text)
     data_quality = Column(String)
     urls = Column(JSONField)  # List of URLs
-    parent_label = Column(Integer, ForeignKey('labels.id'))
-    sublabels = Column(JSONField)  # List of sublabel IDs
+    parent_label_id = Column(Integer, ForeignKey('labels.id'))
+    subsidiaries = Column(JSONField)  # List of sublabel IDs
+    images = Column(JSONField)  # List of images
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -89,12 +93,15 @@ class Master(Base):
     
     id = Column(Integer, primary_key=True)  # Discogs master ID
     title = Column(String, nullable=False)
-    main_release = Column(Integer)  # ID of main release
+    main_release_id = Column(Integer)  # ID of main release
     year = Column(Integer)
     data_quality = Column(String)
     notes = Column(Text)
+    artists = Column(JSONField)  # List of artists
     genres = Column(JSONField)  # List of genres
     styles = Column(JSONField)  # List of styles
+    images = Column(JSONField)  # List of images
+    videos = Column(JSONField)  # List of videos
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -119,9 +126,18 @@ class Release(Base):
     notes = Column(Text)
     data_quality = Column(String)
     status = Column(String)  # Accepted, Draft, etc.
+    artists = Column(JSONField)  # List of artists on release
+    extraartists = Column(JSONField)  # List of extra artists (producers, etc.)
+    labels = Column(JSONField)  # List of labels
+    companies = Column(JSONField)  # List of companies
     genres = Column(JSONField)  # List of genres
     styles = Column(JSONField)  # List of styles
     formats = Column(JSONField)  # List of format details
+    tracklist = Column(JSONField)  # List of tracks
+    identifiers = Column(JSONField)  # List of identifiers (barcode, etc.)
+    images = Column(JSONField)  # List of images
+    videos = Column(JSONField)  # List of videos
+    estimated_weight = Column(Integer)  # Estimated shipping weight
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -130,7 +146,6 @@ class Release(Base):
     artists = relationship("ReleaseArtist", back_populates="release")
     labels = relationship("ReleaseLabel", back_populates="release")
     tracks = relationship("Track", back_populates="release")
-    collection_items = relationship("UserCollection", back_populates="release")
     
     def __repr__(self):
         return f"<Release(id={self.id}, title='{self.title}')>"
@@ -223,10 +238,10 @@ class UserCollection(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    release_id = Column(Integer, ForeignKey('releases.id'), nullable=False)
+    release_id = Column(Integer, nullable=False)  # Remove FK constraint for now
     folder_id = Column(Integer, default=1)  # Discogs folder ID
     instance_id = Column(Integer)  # Discogs collection instance ID
-    rating = Column(Integer, CheckConstraint('rating >= 1 AND rating <= 5'))
+    rating = Column(Integer, CheckConstraint('rating >= 0 AND rating <= 5'))  # Allow 0 for unrated
     notes = Column(Text)
     date_added = Column(DateTime)
     basic_information = Column(JSONField)  # Cached release info
@@ -238,7 +253,6 @@ class UserCollection(Base):
     
     # Relationships
     user = relationship("User", back_populates="collection")
-    release = relationship("Release", back_populates="collection_items")
     
     def __repr__(self):
         return f"<UserCollection(user_id={self.user_id}, release_id={self.release_id})>"
@@ -266,15 +280,14 @@ class DataSource(Base):
     
     __tablename__ = 'data_sources'
     
-    table_name = Column(String, primary_key=True)
-    record_id = Column(Integer, primary_key=True)
-    source_type = Column(String)  # 'xml_dump', 'api', 'manual'
-    source_date = Column(Date)
-    dump_file = Column(String)  # XML dump filename if applicable
-    api_endpoint = Column(String)  # API endpoint if applicable
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_type = Column(String)  # 'collection', 'wantlist', etc.
+    source_name = Column(String)  # 'discogs_api', 'xml_dump', etc.
+    last_updated = Column(DateTime)
+    source_metadata = Column(JSONField)  # Additional metadata
     
     def __repr__(self):
-        return f"<DataSource(table={self.table_name}, id={self.record_id})>"
+        return f"<DataSource(type={self.source_type}, name={self.source_name})>"
 
 
 class SyncStatus(Base):

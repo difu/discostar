@@ -7,6 +7,7 @@ discogs:
     base_url: "https://api.discogs.com"
     rate_limit: 60  # requests per minute
     user_agent: "discostar/0.1.0"
+    verify_ssl: false  # Set to false to disable SSL verification (for development)
   xml_dumps:
     base_url: "https://discogs-data-dumps.s3-us-west-2.amazonaws.com"
     artists_file: "discogs_artists.xml.gz"

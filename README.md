@@ -5,7 +5,9 @@ A powerful Python CLI tool for analyzing your personal record collection using D
 ## ✨ Features
 
 - **Hybrid Data Approach**: Combines Discogs XML dumps for reference data with API calls for personal collection
-- **High-Performance Ingestion**: Memory-efficient XML parsing with batch processing
+- **Collection Sync**: Sync your personal collection from Discogs API with real-time progress tracking
+- **High-Performance Ingestion**: Memory-efficient XML parsing with batch processing (10,000+ records/second)
+- **Rate-Limited API Client**: Respects Discogs API limits with configurable SSL handling
 - **Real-time Progress Tracking**: Visual progress indicators and detailed status reporting
 - **Robust Error Handling**: Comprehensive error recovery with sub-1% error rates
 - **Local Database**: SQLite for development, with Azure PostgreSQL support for production
@@ -59,11 +61,11 @@ discostar download-dumps
 # Import XML data into database
 discostar ingest-data
 
-# Check ingestion status
-discostar status
-
-# Sync your collection from Discogs API (coming soon)
+# Sync your personal collection from Discogs API
 discostar sync-collection
+
+# Check ingestion and sync status
+discostar status
 
 # Generate collection statistics (coming soon)
 discostar stats
@@ -85,9 +87,16 @@ DiscoStar is optimized for processing large Discogs datasets efficiently:
 - **Memory Usage**: Minimal memory footprint with streaming processing
 - **Storage**: SQLite for local development, PostgreSQL for production scale
 
+### API Performance
+- **Collection Sync**: 603 collection items synced in ~8 seconds
+- **Rate Limiting**: 60 requests/minute with 1-second minimum between requests
+- **Error Recovery**: Automatic retry logic for transient API failures
+- **Progress Tracking**: Real-time statistics during sync operations
+
 ### Benchmark Results
 Tested with Discogs June 2025 XML dumps on a Macbook Pro M4:
-- **Artists**: 270,000 records processed in ~30 seconds
+- **Artists**: 1,060,000+ records processed in ~2 minutes
+- **Collection Sync**: 603 personal collection items in ~8 seconds
 - **Releases**: Estimated 8+ million records (full dataset)
 - **Labels**: Estimated 1.5+ million records
 - **Masters**: Estimated 2+ million records
@@ -166,9 +175,14 @@ DiscoStar uses YAML configuration with environment variable overrides.
 discostar init                    # Initialize database and directories
 discostar download-dumps          # Download all XML dumps
 discostar ingest-data            # Import XML data into database
-discostar status                 # Show database and download status
+discostar sync-collection        # Sync your collection from Discogs API
+discostar status                 # Show database and sync status
 
-# Advanced options
+# Collection sync options
+discostar sync-collection --force       # Force refresh of collection data
+discostar sync-wantlist                 # Sync wantlist (coming soon)
+
+# Advanced XML ingestion options
 discostar download-dumps --type artists  # Download specific dump type
 discostar ingest-data --type releases    # Import specific data type
 discostar ingest-data --force            # Force re-ingestion
@@ -197,9 +211,11 @@ AZURE_STORAGE_CONNECTION_STRING=your_azure_connection
 
 See `config/settings.yaml` for detailed configuration options including:
 - Database settings
-- API rate limiting
+- Discogs API configuration and rate limiting
+- SSL verification settings (for development environments)
 - Logging configuration
 - Cache settings
+- XML ingestion batch processing parameters
 
 ## 🧪 Development
 
@@ -227,12 +243,16 @@ mypy src/
 - **Core Modules**: Business logic separated into focused modules
 - **CLI Interface**: Click-based command structure
 - **Database Layer**: SQLAlchemy models matching Discogs schema
+- **API Client**: Async HTTP client with rate limiting and error handling
+- **Collection Sync**: Real-time synchronization with progress tracking
 - **Async Processing**: aiohttp for concurrent API operations
 - **Testing**: Pytest with async support
 
 ## ☁️ Deployment
 
 ### Azure Deployment
+
+__TODO__ nothing done yet 😊
 
 1. Configure Azure credentials
 2. Deploy infrastructure:

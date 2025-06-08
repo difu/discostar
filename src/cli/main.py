@@ -6,9 +6,10 @@ from pathlib import Path
 
 import click
 
-from ..core.utils.config import load_config, setup_logging, get_dumps_directory
+from ..core.utils.config import load_config, setup_logging, get_dumps_directory, validate_config
 from ..core.discogs.xml_downloader import DiscogsDumpDownloader
 from ..core.discogs.data_ingestion import get_ingestion_pipeline
+from ..core.discogs.collection_sync import CollectionSync
 from ..core.database.database import init_database
 
 
@@ -61,9 +62,10 @@ def init(ctx):
     
     click.echo("✅ DiscoStar initialization complete!")
     click.echo("\nNext steps:")
-    click.echo("1. Set up your .env file with DISCOGS_API_TOKEN")
+    click.echo("1. Set up your .env file with DISCOGS_API_TOKEN and DISCOGS_USERNAME")
     click.echo("2. Run 'discostar download-dumps' to fetch Discogs data")
     click.echo("3. Run 'discostar ingest-data' to import XML data into database")
+    click.echo("4. Run 'discostar sync-collection' to sync your personal collection")
 
 
 @cli.command('download-dumps')
@@ -242,6 +244,98 @@ def clear_data(ctx, dump_type):
     except Exception as e:
         click.echo(f"❌ Error clearing data: {e}")
         sys.exit(1)
+
+
+@cli.command('sync-collection')
+@click.option('--force', is_flag=True, help='Force refresh of all collection data')
+@click.pass_context
+def sync_collection(ctx, force):
+    """Sync your Discogs collection with the local database."""
+    config = ctx.obj['config']
+    
+    # Validate API configuration
+    if not validate_config(config):
+        click.echo("❌ Missing required API configuration.")
+        click.echo("Please set DISCOGS_API_TOKEN and DISCOGS_USERNAME environment variables.")
+        sys.exit(1)
+    
+    click.echo("🎵 Syncing collection from Discogs API...")
+    
+    try:
+        asyncio.run(_sync_collection_async(config, force))
+    except KeyboardInterrupt:
+        click.echo("\n❌ Collection sync cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"\n❌ Collection sync failed: {e}")
+        sys.exit(1)
+
+
+async def _sync_collection_async(config, force):
+    """Async wrapper for collection sync."""
+    sync = CollectionSync(config)
+    
+    try:
+        stats = await sync.sync_collection(force_refresh=force)
+        
+        click.echo("\n✅ Collection sync completed!")
+        click.echo(f"📊 Statistics:")
+        click.echo(f"   Items added: {stats['collection_items_added']}")
+        click.echo(f"   Items updated: {stats['collection_items_updated']}")
+        click.echo(f"   Releases fetched: {stats['releases_fetched']}")
+        click.echo(f"   Artists fetched: {stats['artists_fetched']}")
+        click.echo(f"   Labels fetched: {stats['labels_fetched']}")
+        if stats['errors'] > 0:
+            click.echo(f"   Errors: {stats['errors']}")
+        
+    except Exception as e:
+        click.echo(f"❌ Collection sync failed: {e}")
+        raise
+
+
+@cli.command('sync-wantlist')
+@click.option('--force', is_flag=True, help='Force refresh of all wantlist data')
+@click.pass_context
+def sync_wantlist(ctx, force):
+    """Sync your Discogs wantlist with the local database."""
+    config = ctx.obj['config']
+    
+    # Validate API configuration
+    if not validate_config(config):
+        click.echo("❌ Missing required API configuration.")
+        click.echo("Please set DISCOGS_API_TOKEN and DISCOGS_USERNAME environment variables.")
+        sys.exit(1)
+    
+    click.echo("🎵 Syncing wantlist from Discogs API...")
+    
+    try:
+        asyncio.run(_sync_wantlist_async(config, force))
+    except KeyboardInterrupt:
+        click.echo("\n❌ Wantlist sync cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"\n❌ Wantlist sync failed: {e}")
+        sys.exit(1)
+
+
+async def _sync_wantlist_async(config, force):
+    """Async wrapper for wantlist sync."""
+    sync = CollectionSync(config)
+    
+    try:
+        stats = await sync.sync_wantlist(force_refresh=force)
+        
+        click.echo("\n✅ Wantlist sync completed!")
+        click.echo(f"📊 Statistics:")
+        click.echo(f"   Items added: {stats['wantlist_items_added']}")
+        click.echo(f"   Items updated: {stats['wantlist_items_updated']}")
+        click.echo(f"   Releases fetched: {stats['releases_fetched']}")
+        if stats['errors'] > 0:
+            click.echo(f"   Errors: {stats['errors']}")
+        
+    except Exception as e:
+        click.echo(f"❌ Wantlist sync failed: {e}")
+        raise
 
 
 @cli.command('optimize-db')

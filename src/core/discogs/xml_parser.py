@@ -250,18 +250,28 @@ class LabelXMLParser(BaseXMLParser):
             profile = self._safe_text(element.find('profile'))
             data_quality = self._safe_text(element.find('data_quality'))
             
-            # Extract parent label
+            # Extract parent label - get ID from attribute
+            parent_label = None
             parent_label_elem = element.find('parentLabel')
-            parent_label = self._safe_int(parent_label_elem) if parent_label_elem is not None else None
+            if parent_label_elem is not None:
+                parent_id = parent_label_elem.get('id')
+                if parent_id:
+                    try:
+                        parent_label = int(parent_id)
+                    except ValueError:
+                        pass
             
-            # Extract sublabels
+            # Extract sublabels - get IDs from attributes
             sublabels = []
             sublabels_elem = element.find('sublabels')
             if sublabels_elem is not None:
                 for sublabel_elem in sublabels_elem.findall('label'):
-                    sublabel_id = self._safe_int(sublabel_elem)
+                    sublabel_id = sublabel_elem.get('id')
                     if sublabel_id:
-                        sublabels.append(sublabel_id)
+                        try:
+                            sublabels.append(int(sublabel_id))
+                        except ValueError:
+                            pass
             
             # Extract URLs
             urls = self._extract_urls(element)
@@ -273,8 +283,8 @@ class LabelXMLParser(BaseXMLParser):
                 contact_info=contact_info,
                 profile=profile,
                 data_quality=data_quality,
-                parent_label=parent_label,
-                sublabels=sublabels if sublabels else None,
+                parent_label_id=parent_label,
+                subsidiaries=sublabels if sublabels else None,
                 urls=urls if urls else None
             )
             
@@ -294,16 +304,21 @@ class MasterXMLParser(BaseXMLParser):
     def parse_record(self, element: ET.Element) -> Optional[Master]:
         """Parse a master record from XML element."""
         try:
-            # Extract basic information
-            master_id = self._safe_int(element.find('id'))
-            if not master_id:
+            # Extract master ID from attribute
+            master_id_str = element.get('id')
+            if not master_id_str:
+                return None
+            
+            try:
+                master_id = int(master_id_str)
+            except ValueError:
                 return None
             
             title = self._safe_text(element.find('title'))
             if not title:
                 return None
             
-            main_release = self._safe_int(element.find('main_release'))
+            main_release_id = self._safe_int(element.find('main_release'))
             year = self._safe_int(element.find('year'))
             data_quality = self._safe_text(element.find('data_quality'))
             notes = self._safe_text(element.find('notes'))
@@ -315,7 +330,7 @@ class MasterXMLParser(BaseXMLParser):
             master = Master(
                 id=master_id,
                 title=title,
-                main_release=main_release,
+                main_release_id=main_release_id,
                 year=year,
                 data_quality=data_quality,
                 notes=notes,
