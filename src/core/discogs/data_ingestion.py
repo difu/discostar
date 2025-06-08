@@ -93,6 +93,9 @@ class DataIngestionPipeline:
                         logger.warning("No collection data found for 'collection_only' strategy")
                         click.echo("⚠️  No collection data found. Sync collection first or change strategy to 'all'")
                         return True
+                    else:
+                        logger.info(f"Using collection_only strategy - filtering {collection_count} collection releases")
+                        click.echo(f"📋 Using collection_only strategy - processing {collection_count} collection releases")
                 finally:
                     session.close()
         
@@ -115,10 +118,17 @@ class DataIngestionPipeline:
                 if count % 10000 == 0:
                     click.echo(f"Processed {count:,} records...")
             
+            # Get collection release IDs for filtering if using collection_only strategy
+            collection_release_ids = None
+            if dump_type == 'releases':
+                release_strategy = self.config.get('ingestion', {}).get('releases', {}).get('strategy', 'all')
+                if release_strategy == 'collection_only':
+                    collection_release_ids = self._get_collection_release_ids()
+            
             parser = parser_class(file_path, progress_callback)
             
             # Process records in batches
-            success = self._process_records_batch(parser, dump_type, file_path)
+            success = self._process_records_batch(parser, dump_type, file_path, collection_release_ids)
             
             if success:
                 logger.info(f"Successfully ingested {dump_type} dump: {parser.processed_records:,} records, {parser.error_count} errors")
@@ -131,13 +141,15 @@ class DataIngestionPipeline:
             logger.error(f"Error during ingestion of {dump_type} dump: {e}")
             return False
     
-    def _process_records_batch(self, parser: BaseXMLParser, dump_type: str, file_path: Path) -> bool:
+    def _process_records_batch(self, parser: BaseXMLParser, dump_type: str, file_path: Path, 
+                              collection_release_ids: Optional[set] = None) -> bool:
         """Process records from parser in batches.
         
         Args:
             parser: XML parser instance
             dump_type: Type of dump being processed
             file_path: Path to the dump file
+            collection_release_ids: Set of release IDs to filter for (collection_only strategy)
             
         Returns:
             True if processing was successful, False otherwise
@@ -150,6 +162,11 @@ class DataIngestionPipeline:
             total_errors = 0
             
             for record in parser.parse_file():
+                # Filter releases if using collection_only strategy
+                if collection_release_ids is not None and dump_type == 'releases':
+                    if hasattr(record, 'id') and record.id not in collection_release_ids:
+                        continue  # Skip releases not in collection
+                
                 batch.append(record)
                 
                 # Process batch when it reaches the configured size
@@ -323,6 +340,26 @@ class DataIngestionPipeline:
             
         except Exception as e:
             logger.warning(f"Error recording data source: {e}")
+    
+    def _get_collection_release_ids(self) -> set:
+        """Get the set of release IDs from user collections.
+        
+        Returns:
+            Set of release IDs that are in user collections
+        """
+        session = self.SessionLocal()
+        try:
+            from ..database.models import UserCollection
+            
+            # Get all unique release IDs from user collections
+            result = session.query(UserCollection.release_id).distinct().all()
+            return {row[0] for row in result if row[0] is not None}
+            
+        except Exception as e:
+            logger.error(f"Error getting collection release IDs: {e}")
+            return set()
+        finally:
+            session.close()
     
     def get_ingestion_status(self) -> Dict[str, Any]:
         """Get the status of data ingestion for all dump types.

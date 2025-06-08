@@ -354,9 +354,14 @@ class ReleaseXMLParser(BaseXMLParser):
     def parse_record(self, element: ET.Element) -> Optional[Release]:
         """Parse a release record from XML element."""
         try:
-            # Extract basic information
-            release_id = self._safe_int(element.find('id'))
-            if not release_id:
+            # Extract release ID from attribute
+            release_id_str = element.get('id')
+            if not release_id_str:
+                return None
+            
+            try:
+                release_id = int(release_id_str)
+            except ValueError:
                 return None
             
             title = self._safe_text(element.find('title'))
@@ -368,7 +373,7 @@ class ReleaseXMLParser(BaseXMLParser):
             country = self._safe_text(element.find('country'))
             notes = self._safe_text(element.find('notes'))
             data_quality = self._safe_text(element.find('data_quality'))
-            status = self._safe_text(element.find('status'))
+            status = element.get('status')  # Status is an attribute
             
             # Parse released date
             released = None

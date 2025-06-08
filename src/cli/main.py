@@ -123,6 +123,40 @@ def ingest_data(ctx, dump_type, force):
     """Ingest XML dump data into the database."""
     config = ctx.obj['config']
     
+    # Check release strategy and provide guidance
+    release_strategy = config.get('ingestion', {}).get('releases', {}).get('strategy', 'all')
+    if dump_type in ['all', 'releases'] and release_strategy == 'collection_only':
+        # Check if collection data exists
+        try:
+            from ..core.database.models import UserCollection
+            from ..core.database.database import get_database_url
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            
+            database_url = get_database_url(config)
+            engine = create_engine(database_url)
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            session = SessionLocal()
+            
+            try:
+                collection_count = session.query(UserCollection).count()
+                if collection_count == 0:
+                    click.echo("⚠️  Using 'collection_only' strategy but no collection data found!")
+                    click.echo("💡 Recommended workflow for collection_only strategy:")
+                    click.echo("   1. discostar ingest-data --type artists")
+                    click.echo("   2. discostar ingest-data --type labels") 
+                    click.echo("   3. discostar ingest-data --type masters")
+                    click.echo("   4. discostar sync-collection")
+                    click.echo("   5. discostar ingest-data --type releases")
+                    click.echo("\n🔄 Run 'discostar collection-workflow' for guided setup")
+                    return
+                else:
+                    click.echo(f"📋 Using collection_only strategy with {collection_count} collection items")
+            finally:
+                session.close()
+        except Exception as e:
+            click.echo(f"⚠️  Error checking collection data: {e}")
+    
     click.echo("🎵 Starting XML data ingestion...")
     
     try:
@@ -336,6 +370,87 @@ async def _sync_wantlist_async(config, force):
     except Exception as e:
         click.echo(f"❌ Wantlist sync failed: {e}")
         raise
+
+
+@cli.command('collection-workflow')
+@click.pass_context
+def collection_workflow(ctx):
+    """Guided workflow for collection-only strategy setup."""
+    config = ctx.obj['config']
+    
+    click.echo("🎵 Collection-Only Workflow Guide")
+    click.echo("================================")
+    click.echo("This guide will help you set up DiscoStar with the 'collection_only' strategy.")
+    click.echo("This strategy only imports releases that are in your personal collection,")
+    click.echo("significantly reducing database size and improving performance.\n")
+    
+    # Check configuration
+    release_strategy = config.get('ingestion', {}).get('releases', {}).get('strategy', 'all')
+    if release_strategy != 'collection_only':
+        click.echo("⚠️  Your configuration is not set to 'collection_only' strategy.")
+        click.echo("💡 Update your config/settings.yaml file to:")
+        click.echo("   ingestion:")
+        click.echo("     releases:")
+        click.echo("       strategy: \"collection_only\"")
+        click.echo()
+        if not click.confirm("Continue with current configuration?"):
+            return
+    
+    # Check API configuration
+    if not validate_config(config):
+        click.echo("❌ Missing required API configuration.")
+        click.echo("Please set DISCOGS_API_TOKEN and DISCOGS_USERNAME environment variables.")
+        return
+    
+    try:
+        from ..core.database.models import UserCollection, Artist, Label, Master, Release
+        from ..core.database.database import get_database_url
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        
+        database_url = get_database_url(config)
+        engine = create_engine(database_url)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        session = SessionLocal()
+        
+        try:
+            # Check current status
+            collection_count = session.query(UserCollection).count()
+            artist_count = session.query(Artist).count()
+            label_count = session.query(Label).count()
+            master_count = session.query(Master).count()
+            release_count = session.query(Release).count()
+            
+            click.echo("📊 Current Database Status:")
+            click.echo(f"   Artists: {artist_count:,}")
+            click.echo(f"   Labels: {label_count:,}")
+            click.echo(f"   Masters: {master_count:,}")
+            click.echo(f"   Releases: {release_count:,}")
+            click.echo(f"   Collection Items: {collection_count:,}")
+            click.echo()
+            
+            # Determine next steps
+            if artist_count == 0:
+                click.echo("📋 Next Step: Download and ingest reference data")
+                click.echo("   discostar download-dumps")
+                click.echo("   discostar ingest-data --type artists")
+                click.echo("   discostar ingest-data --type labels")
+                click.echo("   discostar ingest-data --type masters")
+            elif collection_count == 0:
+                click.echo("📋 Next Step: Sync your collection")
+                click.echo("   discostar sync-collection")
+            elif release_count == 0:
+                click.echo("📋 Next Step: Ingest collection releases")
+                click.echo("   discostar ingest-data --type releases")
+            else:
+                click.echo("✅ Collection-only setup appears complete!")
+                click.echo("💡 You can now run 'discostar optimize-db --clean-unused' to remove unused releases")
+            
+        finally:
+            session.close()
+            
+    except Exception as e:
+        click.echo(f"❌ Error checking workflow status: {e}")
 
 
 @cli.command('optimize-db')
