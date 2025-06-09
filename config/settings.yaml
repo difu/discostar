@@ -34,8 +34,11 @@ ingestion:
   releases:
     strategy: "collection_only"  # Options: "all", "collection_only", "selective", "skip"
     # Note: "collection_only" requires collection data to be synced first
+    
+    # Master release expansion (for collection_only strategy)
+    include_master_releases: true  # Include all releases linked to masters in collection
+    
     # For selective strategy (future):
-    include_masters_releases: true  # Include releases from ingested masters
     include_artist_releases: false  # Include all releases from collection artists
     include_label_releases: false   # Include all releases from collection labels
     max_releases_per_artist: 50     # Limit releases per artist (for discovery)

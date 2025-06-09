@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, Set, Optional
 from sqlalchemy.orm import Session
 
-from ..database.models import UserCollection, Master, Artist, Label
+from ..database.models import UserCollection, Master, Artist, Label, Release
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class ReleaseFilter:
             return True
         
         if self.strategy == 'collection_only':
-            return self._is_collection_release(release_id)
+            return self._is_collection_release_or_master(release_id, master_id)
         
         if self.strategy == 'selective':
             return self._is_selective_release(release_id, master_id, artist_ids, label_ids)
@@ -68,6 +68,26 @@ class ReleaseFilter:
             self._load_collection_release_ids()
         
         return release_id in self._collection_release_ids
+    
+    def _is_collection_release_or_master(self, release_id: int, master_id: Optional[int] = None) -> bool:
+        """Check if a release should be included in collection_only strategy.
+        
+        This includes:
+        1. Releases directly in the collection
+        2. If include_master_releases is True, releases linked to masters in collection
+        """
+        # Always include direct collection releases
+        if self._is_collection_release(release_id):
+            return True
+        
+        # Check master release expansion if enabled
+        if (master_id and 
+            self.release_config.get('include_master_releases', False) and
+            self._is_collection_master(master_id)):
+            logger.debug(f"Including release {release_id} via master {master_id}")
+            return True
+        
+        return False
     
     def _is_selective_release(self, release_id: int, master_id: Optional[int] = None,
                             artist_ids: Optional[Set[int]] = None,
@@ -111,10 +131,9 @@ class ReleaseFilter:
         """Check if a master is referenced by collection releases."""
         if self._collection_master_ids is None:
             try:
-                master_ids = (self.session.query(UserCollection.release_id)
-                            .join(Release, UserCollection.release_id == Release.id)
+                master_ids = (self.session.query(Release.master_id)
+                            .join(UserCollection, Release.id == UserCollection.release_id)
                             .filter(Release.master_id.isnot(None))
-                            .with_entities(Release.master_id)
                             .distinct().all())
                 self._collection_master_ids = {mid[0] for mid in master_ids if mid[0]}
                 logger.info(f"Loaded {len(self._collection_master_ids)} collection master IDs")
@@ -172,7 +191,7 @@ class ReleaseFilter:
             'strategy': self.strategy,
             'collection_releases': len(self._collection_release_ids) if self._collection_release_ids else 0,
             'collection_masters': len(self._collection_master_ids) if self._collection_master_ids else 0,
-            'include_masters_releases': self.release_config.get('include_masters_releases', True),
+            'include_master_releases': self.release_config.get('include_master_releases', False),
             'include_artist_releases': self.release_config.get('include_artist_releases', False),
             'include_label_releases': self.release_config.get('include_label_releases', False),
             'max_releases_per_artist': self.release_config.get('max_releases_per_artist', 50),
@@ -191,3 +210,50 @@ def create_release_filter(config: Dict[str, Any], session: Session) -> ReleaseFi
         ReleaseFilter instance
     """
     return ReleaseFilter(config, session)
+
+
+def get_master_release_ids(session: Session, master_ids: Set[int]) -> Set[int]:
+    """Get all release IDs that belong to the given master IDs.
+    
+    Args:
+        session: Database session
+        master_ids: Set of master IDs
+        
+    Returns:
+        Set of release IDs linked to these masters
+    """
+    if not master_ids:
+        return set()
+    
+    try:
+        release_ids = (session.query(Release.id)
+                      .filter(Release.master_id.in_(master_ids))
+                      .all())
+        result = {rid[0] for rid in release_ids}
+        logger.info(f"Found {len(result)} releases for {len(master_ids)} masters")
+        return result
+    except Exception as e:
+        logger.error(f"Error getting master release IDs: {e}")
+        return set()
+
+
+def get_collection_master_ids(session: Session) -> Set[int]:
+    """Get all master IDs that have releases in user collections.
+    
+    Args:
+        session: Database session
+        
+    Returns:
+        Set of master IDs with releases in collections
+    """
+    try:
+        master_ids = (session.query(Release.master_id)
+                     .join(UserCollection, Release.id == UserCollection.release_id)
+                     .filter(Release.master_id.isnot(None))
+                     .distinct().all())
+        result = {mid[0] for mid in master_ids if mid[0]}
+        logger.info(f"Found {len(result)} masters with collection releases")
+        return result
+    except Exception as e:
+        logger.error(f"Error getting collection master IDs: {e}")
+        return set()

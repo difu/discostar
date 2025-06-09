@@ -202,6 +202,17 @@ DiscoStar offers flexible release data management to balance completeness with p
 | **`all`** | 8M+ releases | Complete dataset, discovery | ~2GB+ | Slower |
 | **`skip`** | 0 releases | Collection-only analysis | ~50MB | Fastest |
 | **`collection_only`** | 100s-1000s | Personal collection focus | ~100MB | Fast |
+| **`collection_only` + masters** | 1000s-10000s | Collection + all variants | ~200MB | Fast |
+
+### 🆕 Master Release Expansion
+
+**NEW FEATURE**: For `collection_only` strategy, you can now include all releases linked to masters in your collection. This gives you comprehensive coverage of all pressings, remasters, and variants of albums you own.
+
+**Example**: If you own "Abbey Road" (1969 UK pressing), enabling master expansion will also include:
+- Abbey Road (1969 US pressing)
+- Abbey Road (1987 CD remaster)
+- Abbey Road (2019 anniversary edition)
+- All other official releases of the album
 
 ### Recommended Workflow
 
@@ -223,7 +234,27 @@ Edit `config/settings.yaml`:
 ```yaml
 ingestion:
   releases:
-    strategy: "skip"  # or "all", "collection_only"
+    strategy: "collection_only"  # or "all", "skip"
+    include_master_releases: true  # Include all pressings of albums in collection
+```
+
+### Master Expansion Workflow
+
+```bash
+# 1. Set up collection-only strategy with master expansion
+echo "ingestion:
+  releases:
+    strategy: 'collection_only'
+    include_master_releases: true" >> config/settings.yaml
+
+# 2. Sync your collection first
+discostar sync-collection
+
+# 3. Import releases with master expansion
+discostar ingest-data --type releases
+
+# 4. Check results
+discostar status  # Shows collection + master variant counts
 ```
 
 ## 📊 Analytics Features (Coming Soon)
@@ -286,6 +317,9 @@ discostar collection-workflow            # Interactive guide for collection-only
 
 # Database optimization (after collection sync)
 discostar optimize-db --clean-unused     # Remove releases not in collections
+
+# Master release expansion options
+discostar ingest-data --include-masters  # CLI override for master expansion
 
 # Verbose logging
 discostar -v <command>           # Enable detailed logging

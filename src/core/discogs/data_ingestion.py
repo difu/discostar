@@ -16,6 +16,7 @@ from ..database.models import Base, Artist, Release, Label, Master, DataSource
 from ..database.database import get_database_url
 from .xml_parser import ArtistXMLParser, ReleaseXMLParser, LabelXMLParser, MasterXMLParser, BaseXMLParser
 from .relationship_processor import get_relationship_processor
+from .release_filter import create_release_filter
 
 
 logger = logging.getLogger(__name__)
@@ -126,17 +127,25 @@ class DataIngestionPipeline:
                 if count % 10000 == 0:
                     click.echo(f"Processed {count:,} records...")
             
-            # Get collection release IDs for filtering if using collection_only strategy
-            collection_release_ids = None
+            # Initialize release filter for releases
+            release_filter = None
             if dump_type == 'releases':
-                release_strategy = self.config.get('ingestion', {}).get('releases', {}).get('strategy', 'all')
-                if release_strategy == 'collection_only':
-                    collection_release_ids = self._get_collection_release_ids()
+                session = self.SessionLocal()
+                try:
+                    release_filter = create_release_filter(self.config, session)
+                    strategy_info = release_filter.get_strategy_info()
+                    logger.info(f"Release filter initialized: {strategy_info}")
+                    if strategy_info['strategy'] == 'collection_only' and strategy_info.get('include_master_releases'):
+                        click.echo(f"📋 Collection strategy with master expansion enabled - "
+                                  f"{strategy_info['collection_releases']} collection releases, "
+                                  f"{strategy_info['collection_masters']} masters")
+                finally:
+                    session.close()
             
             parser = parser_class(file_path, progress_callback)
             
             # Process records in batches
-            success = self._process_records_batch(parser, dump_type, file_path, collection_release_ids)
+            success = self._process_records_batch(parser, dump_type, file_path, release_filter)
             
             if success:
                 logger.info(f"Successfully ingested {dump_type} dump: {parser.processed_records:,} records, {parser.error_count} errors")
@@ -150,14 +159,14 @@ class DataIngestionPipeline:
             return False
     
     def _process_records_batch(self, parser: BaseXMLParser, dump_type: str, file_path: Path, 
-                              collection_release_ids: Optional[set] = None) -> bool:
+                              release_filter=None) -> bool:
         """Process records from parser in batches.
         
         Args:
             parser: XML parser instance
             dump_type: Type of dump being processed
             file_path: Path to the dump file
-            collection_release_ids: Set of release IDs to filter for (collection_only strategy)
+            release_filter: Release filter instance for selective ingestion
             
         Returns:
             True if processing was successful, False otherwise
@@ -170,10 +179,13 @@ class DataIngestionPipeline:
             total_errors = 0
             
             for record in parser.parse_file():
-                # Filter releases if using collection_only strategy
-                if collection_release_ids is not None and dump_type == 'releases':
-                    if hasattr(record, 'id') and record.id not in collection_release_ids:
-                        continue  # Skip releases not in collection
+                # Filter releases if using selective strategy
+                if release_filter is not None and dump_type == 'releases':
+                    if hasattr(record, 'id'):
+                        # Extract master_id for filtering
+                        master_id = getattr(record, 'master_id', None)
+                        if not release_filter.should_include_release(record.id, master_id):
+                            continue  # Skip releases not matching filter criteria
                 
                 batch.append(record)
                 

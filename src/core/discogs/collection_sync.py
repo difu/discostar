@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
@@ -485,11 +485,14 @@ class CollectionSync:
         # Check if release already exists
         existing = db.query(Release).filter_by(id=release_data.get('id')).first()
         
+        # Parse release date
+        released_date = self._parse_release_date(release_data.get('released'))
+        
         if existing:
             # Update existing release
             existing.title = release_data.get('title')
             existing.year = release_data.get('year')
-            existing.released = release_data.get('released')
+            existing.released = released_date
             existing.master_id = release_data.get('master_id')
             existing.country = release_data.get('country')
             existing.status = release_data.get('status')
@@ -514,7 +517,7 @@ class CollectionSync:
                 id=release_data.get('id'),
                 title=release_data.get('title'),
                 year=release_data.get('year'),
-                released=release_data.get('released'),
+                released=released_date,
                 master_id=release_data.get('master_id'),
                 country=release_data.get('country'),
                 status=release_data.get('status'),
@@ -536,6 +539,33 @@ class CollectionSync:
                 updated_at=datetime.utcnow()
             )
             db.add(release)
+    
+    def _parse_release_date(self, date_string: Optional[str]) -> Optional[date]:
+        """Parse a release date string into a Python date object.
+        
+        Args:
+            date_string: Date string from Discogs API (e.g., '2023-10-15')
+            
+        Returns:
+            Python date object or None if parsing fails
+        """
+        if not date_string:
+            return None
+        
+        try:
+            # Try full date format first (YYYY-MM-DD)
+            return datetime.strptime(date_string, '%Y-%m-%d').date()
+        except ValueError:
+            try:
+                # Try year-month format (YYYY-MM)
+                return datetime.strptime(date_string, '%Y-%m').date()
+            except ValueError:
+                try:
+                    # Try year only format (YYYY)
+                    return datetime.strptime(date_string, '%Y').date()
+                except ValueError:
+                    logger.warning(f"Could not parse release date: {date_string}")
+                    return None
     
     def _update_data_source(self, db: Session, source_type: str):
         """Update data source timestamp."""

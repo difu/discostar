@@ -118,10 +118,20 @@ async def _download_dumps_async(config, dump_type, force):
               type=click.Choice(['artists', 'releases', 'labels', 'masters', 'all']),
               default='all', help='Type of dump to ingest')
 @click.option('--force', is_flag=True, help='Force re-ingestion even if data exists')
+@click.option('--include-masters', is_flag=True, 
+              help='Include all releases linked to masters in collection (overrides config)')
 @click.pass_context
-def ingest_data(ctx, dump_type, force):
+def ingest_data(ctx, dump_type, force, include_masters):
     """Ingest XML dump data into the database."""
     config = ctx.obj['config']
+    
+    # Apply CLI override for master releases if specified
+    if include_masters and dump_type in ['releases', 'all']:
+        # Create a copy of config to avoid modifying the original
+        import copy
+        config = copy.deepcopy(config)
+        config.setdefault('ingestion', {}).setdefault('releases', {})['include_master_releases'] = True
+        click.echo("🔗 CLI override: include_master_releases enabled")
     
     # Check release strategy and provide guidance
     release_strategy = config.get('ingestion', {}).get('releases', {}).get('strategy', 'all')
@@ -151,7 +161,13 @@ def ingest_data(ctx, dump_type, force):
                     click.echo("\n🔄 Run 'discostar collection-workflow' for guided setup")
                     return
                 else:
-                    click.echo(f"📋 Using collection_only strategy with {collection_count} collection items")
+                    include_master_releases = config.get('ingestion', {}).get('releases', {}).get('include_master_releases', False)
+                    if include_master_releases:
+                        click.echo(f"📋 Collection strategy with master expansion - {collection_count} collection releases")
+                    else:
+                        click.echo(f"📋 Collection strategy - {collection_count} collection releases")
+                        click.echo("💡 Tip: Enable 'include_master_releases: true' to get all variants of your albums")
+                        click.echo("   Or use: discostar ingest-data --type releases --include-masters")
             finally:
                 session.close()
         except Exception as e:
