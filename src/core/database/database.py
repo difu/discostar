@@ -68,13 +68,25 @@ class DatabaseManager:
         return self.SessionLocal()
     
     def init_database(self) -> None:
-        """Initialize the database with tables."""
+        """Initialize the database with tables and run migrations."""
         # Ensure data directory exists
         db_path = Path(self.database_url.replace('sqlite:///', ''))
         db_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Create tables
         self.create_tables()
+        
+        # Run migrations
+        from .migrations import run_migrations
+        try:
+            migrations_success = run_migrations()
+            if migrations_success:
+                logger.info("Database migrations completed successfully")
+            else:
+                logger.warning("Some database migrations failed")
+        except Exception as e:
+            logger.error(f"Error running migrations: {e}")
+            # Don't fail initialization if migrations fail
         
         logger.info(f"Database initialized at: {db_path}")
     

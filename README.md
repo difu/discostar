@@ -149,7 +149,7 @@ GROUP BY l.name ORDER BY COUNT(*) DESC;
 -- Find longest tracks in collection
 SELECT r.title, t.title, t.duration FROM tracks t
 JOIN releases r ON t.release_id = r.id
-ORDER BY t.duration DESC LIMIT 10;
+ORDER BY t.duration_seconds DESC LIMIT 10;
 ```
 
 ## 💾 Storage Strategy

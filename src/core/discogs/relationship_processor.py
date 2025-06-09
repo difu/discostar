@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from ..database.models import Release, ReleaseArtist, ReleaseLabel, Track
+from ..utils.duration import parse_duration_to_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,9 @@ class RelationshipProcessor:
         """
         created_count = 0
         
+        # Keep track of already processed combinations to avoid duplicates
+        processed_combinations = set()
+        
         # Process main artists
         if release.artists:
             for artist_data in release.artists:
@@ -72,8 +76,19 @@ class RelationshipProcessor:
                         release.id, artist_data, role=""
                     )
                     if release_artist:
-                        session.merge(release_artist)
-                        created_count += 1
+                        # Create unique key for deduplication
+                        key = (release_artist.release_id, release_artist.artist_id, release_artist.role)
+                        if key not in processed_combinations:
+                            # Check if already exists in database
+                            existing = session.query(ReleaseArtist).filter(
+                                ReleaseArtist.release_id == release_artist.release_id,
+                                ReleaseArtist.artist_id == release_artist.artist_id,
+                                ReleaseArtist.role == release_artist.role
+                            ).first()
+                            if not existing:
+                                session.add(release_artist)
+                                created_count += 1
+                            processed_combinations.add(key)
                 except Exception as e:
                     logger.debug(f"Error creating release artist: {e}")
         
@@ -86,8 +101,19 @@ class RelationshipProcessor:
                         release.id, artist_data, role=role
                     )
                     if release_artist:
-                        session.merge(release_artist)
-                        created_count += 1
+                        # Create unique key for deduplication
+                        key = (release_artist.release_id, release_artist.artist_id, release_artist.role)
+                        if key not in processed_combinations:
+                            # Check if already exists in database
+                            existing = session.query(ReleaseArtist).filter(
+                                ReleaseArtist.release_id == release_artist.release_id,
+                                ReleaseArtist.artist_id == release_artist.artist_id,
+                                ReleaseArtist.role == release_artist.role
+                            ).first()
+                            if not existing:
+                                session.add(release_artist)
+                                created_count += 1
+                            processed_combinations.add(key)
                 except Exception as e:
                     logger.debug(f"Error creating release extra artist: {e}")
         
@@ -153,12 +179,26 @@ class RelationshipProcessor:
         if not release.labels:
             return 0
         
+        # Keep track of already processed combinations to avoid duplicates
+        processed_combinations = set()
+        
         for label_data in release.labels:
             try:
                 release_label = self._create_release_label(release.id, label_data)
                 if release_label:
-                    session.merge(release_label)
-                    created_count += 1
+                    # Create unique key for deduplication
+                    key = (release_label.release_id, release_label.label_id, release_label.catalog_number)
+                    if key not in processed_combinations:
+                        # Check if already exists in database
+                        existing = session.query(ReleaseLabel).filter(
+                            ReleaseLabel.release_id == release_label.release_id,
+                            ReleaseLabel.label_id == release_label.label_id,
+                            ReleaseLabel.catalog_number == release_label.catalog_number
+                        ).first()
+                        if not existing:
+                            session.add(release_label)
+                            created_count += 1
+                        processed_combinations.add(key)
             except Exception as e:
                 logger.debug(f"Error creating release label: {e}")
         
@@ -252,11 +292,15 @@ class RelationshipProcessor:
             if not title:
                 return None
             
+            duration_str = track_data.get('duration')
+            duration_seconds = parse_duration_to_seconds(duration_str)
+            
             track = Track(
                 release_id=release_id,
                 position=track_data.get('position', ''),
                 title=title,
-                duration=track_data.get('duration'),
+                duration=duration_str,
+                duration_seconds=duration_seconds,
                 type=track_data.get('type_')  # 'type_' to avoid Python keyword conflict
             )
             
@@ -311,12 +355,13 @@ class RelationshipProcessor:
                         stats['errors'] += rel_stats['errors']
                         stats['releases_processed'] += 1
                         
+                        # Commit after each release to avoid batch conflicts
+                        session.commit()
+                        
                     except Exception as e:
                         logger.error(f"Error processing release {release.id}: {e}")
+                        session.rollback()
                         stats['errors'] += 1
-                
-                # Commit batch
-                session.commit()
                 
                 # Log progress
                 if stats['releases_processed'] % 1000 == 0:

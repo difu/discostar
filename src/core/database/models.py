@@ -198,7 +198,8 @@ class Track(Base):
     release_id = Column(Integer, ForeignKey('releases.id'), nullable=False)
     position = Column(String)  # "A1", "1", "B2", etc.
     title = Column(String, nullable=False)
-    duration = Column(String)  # "3:45"
+    duration = Column(String)  # "3:45" - keep for display purposes
+    duration_seconds = Column(Integer)  # Duration in seconds for proper sorting
     type = Column(String)  # "track", "index", "heading"
     
     # Relationships

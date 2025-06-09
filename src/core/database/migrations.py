@@ -90,6 +90,20 @@ class MigrationManager:
         
         try:
             with self.db_manager.engine.connect() as connection:
+                # Special handling for initial migration - check if tables exist
+                if migration.version == "001":
+                    inspector = inspect(self.db_manager.engine)
+                    existing_tables = inspector.get_table_names()
+                    if 'artists' in existing_tables:
+                        logger.info("Tables already exist, marking initial migration as applied")
+                        # Just record the migration as applied without executing
+                        connection.execute(
+                            text("INSERT INTO schema_migrations (version, description) VALUES (:version, :description)"),
+                            {"version": migration.version, "description": migration.description}
+                        )
+                        connection.commit()
+                        return True
+                
                 # Execute migration SQL
                 if migration.up_sql.strip():
                     statements = [stmt.strip() for stmt in migration.up_sql.split(';') if stmt.strip()]
@@ -205,6 +219,30 @@ def create_initial_migration() -> Migration:
     )
 
 
+def create_duration_seconds_migration() -> Migration:
+    """Create migration to add duration_seconds column to tracks table.
+    
+    Returns:
+        Migration object for adding duration_seconds column
+    """
+    up_sql = """
+    ALTER TABLE tracks ADD COLUMN duration_seconds INTEGER;
+    CREATE INDEX idx_tracks_duration_seconds ON tracks(duration_seconds);
+    """
+    
+    down_sql = """
+    DROP INDEX IF EXISTS idx_tracks_duration_seconds;
+    ALTER TABLE tracks DROP COLUMN duration_seconds;
+    """
+    
+    return Migration(
+        version="002",
+        description="Add duration_seconds column to tracks table for proper sorting",
+        up_sql=up_sql,
+        down_sql=down_sql
+    )
+
+
 def run_migrations() -> bool:
     """Run all pending migrations.
     
@@ -216,6 +254,7 @@ def run_migrations() -> bool:
     # Define migrations in order
     migrations = [
         create_initial_migration(),
+        create_duration_seconds_migration(),
         # Add future migrations here
     ]
     
