@@ -150,6 +150,45 @@ GROUP BY l.name ORDER BY COUNT(*) DESC;
 SELECT r.title, t.title, t.duration FROM tracks t
 JOIN releases r ON t.release_id = r.id
 ORDER BY t.duration_seconds DESC LIMIT 10;
+
+-- Find favorite decade based on collection (earliest version of each master release only)
+  WITH earliest_releases AS (
+      SELECT
+          r.master_id,
+          MIN(CAST(strftime('%Y', r.released) AS INTEGER)) as earliest_year
+      FROM releases r
+      INNER JOIN user_collection uc ON r.id = uc.release_id
+      WHERE r.master_id IS NOT NULL
+        AND r.released IS NOT NULL
+        AND strftime('%Y', r.released) IS NOT NULL
+      GROUP BY r.master_id
+
+      UNION ALL
+
+      -- Include releases without master_id (standalone releases)
+      SELECT
+          NULL as master_id,
+          CAST(strftime('%Y', r.released) AS INTEGER) as earliest_year
+      FROM releases r
+      INNER JOIN user_collection uc ON r.id = uc.release_id
+      WHERE r.master_id IS NULL
+        AND r.released IS NOT NULL
+        AND strftime('%Y', r.released) IS NOT NULL
+  ),
+  decade_counts AS (
+      SELECT
+          (earliest_year / 10) * 10 as decade_start,
+          COUNT(*) as release_count
+      FROM earliest_releases
+      GROUP BY (earliest_year / 10) * 10
+  )
+  SELECT
+      decade_start,
+      (decade_start || 's') as decade,
+      release_count,
+      ROUND(100.0 * release_count / SUM(release_count) OVER(), 2) as percentage
+  FROM decade_counts
+  ORDER BY release_count DESC;
 ```
 
 ## 💾 Storage Strategy
