@@ -418,6 +418,12 @@ class ReleaseXMLParser(BaseXMLParser):
                     
                     formats.append(format_data)
             
+            # Extract artists, labels, and tracklist
+            artists = self._extract_artists(element)
+            extraartists = self._extract_extraartists(element)
+            labels = self._extract_labels(element)
+            tracklist = self._extract_tracklist(element)
+            
             # Create Release object
             release = Release(
                 id=release_id,
@@ -429,6 +435,10 @@ class ReleaseXMLParser(BaseXMLParser):
                 notes=notes,
                 data_quality=data_quality,
                 status=status,
+                artists=artists if artists else None,
+                extraartists=extraartists if extraartists else None,
+                labels=labels if labels else None,
+                tracklist=tracklist if tracklist else None,
                 genres=genres if genres else None,
                 styles=styles if styles else None,
                 formats=formats if formats else None
@@ -438,4 +448,151 @@ class ReleaseXMLParser(BaseXMLParser):
             
         except Exception as e:
             logger.warning(f"Error parsing release record: {e}")
+            return None
+    
+    def _extract_artists(self, parent: ET.Element) -> List[Dict[str, Any]]:
+        """Extract main artists from release element."""
+        artists = []
+        artists_elem = parent.find('artists')
+        if artists_elem is not None:
+            for artist_elem in artists_elem.findall('artist'):
+                artist_data = self._extract_artist_data(artist_elem)
+                if artist_data:
+                    artists.append(artist_data)
+        return artists
+    
+    def _extract_extraartists(self, parent: ET.Element) -> List[Dict[str, Any]]:
+        """Extract extra artists (producers, etc.) from release element."""
+        extraartists = []
+        extraartists_elem = parent.find('extraartists')
+        if extraartists_elem is not None:
+            for artist_elem in extraartists_elem.findall('artist'):
+                artist_data = self._extract_artist_data(artist_elem)
+                if artist_data:
+                    extraartists.append(artist_data)
+        return extraartists
+    
+    def _extract_artist_data(self, artist_elem: ET.Element) -> Optional[Dict[str, Any]]:
+        """Extract artist data from artist element."""
+        try:
+            artist_data = {}
+            
+            # Get artist ID
+            artist_id = artist_elem.find('id')
+            if artist_id is not None:
+                id_value = self._safe_text(artist_id)
+                if id_value:
+                    artist_data['id'] = int(id_value)
+            
+            # Get artist name
+            name = self._safe_text(artist_elem.find('name'))
+            if name:
+                artist_data['name'] = name
+            
+            # Get artist name variation (anv)
+            anv = self._safe_text(artist_elem.find('anv'))
+            if anv:
+                artist_data['anv'] = anv
+            
+            # Get join relation
+            join = self._safe_text(artist_elem.find('join'))
+            if join:
+                artist_data['join'] = join
+            
+            # Get role (for extra artists)
+            role = self._safe_text(artist_elem.find('role'))
+            if role:
+                artist_data['role'] = role
+            
+            # Get tracks (where artist appears)
+            tracks = self._safe_text(artist_elem.find('tracks'))
+            if tracks:
+                artist_data['tracks'] = tracks
+            
+            return artist_data if artist_data else None
+            
+        except Exception as e:
+            logger.debug(f"Error extracting artist data: {e}")
+            return None
+    
+    def _extract_labels(self, parent: ET.Element) -> List[Dict[str, Any]]:
+        """Extract labels from release element."""
+        labels = []
+        labels_elem = parent.find('labels')
+        if labels_elem is not None:
+            for label_elem in labels_elem.findall('label'):
+                label_data = self._extract_label_data(label_elem)
+                if label_data:
+                    labels.append(label_data)
+        return labels
+    
+    def _extract_label_data(self, label_elem: ET.Element) -> Optional[Dict[str, Any]]:
+        """Extract label data from label element."""
+        try:
+            label_data = {}
+            
+            # Get label ID (usually as attribute)
+            label_id = label_elem.get('id')
+            if label_id:
+                try:
+                    label_data['id'] = int(label_id)
+                except ValueError:
+                    pass
+            
+            # Get label name (usually as attribute)  
+            name = label_elem.get('name')
+            if name:
+                label_data['name'] = name
+            
+            # Get catalog number (usually as attribute)
+            catno = label_elem.get('catno')
+            if catno:
+                label_data['catno'] = catno
+            
+            return label_data if label_data else None
+            
+        except Exception as e:
+            logger.debug(f"Error extracting label data: {e}")
+            return None
+    
+    def _extract_tracklist(self, parent: ET.Element) -> List[Dict[str, Any]]:
+        """Extract tracklist from release element."""
+        tracks = []
+        tracklist_elem = parent.find('tracklist')
+        if tracklist_elem is not None:
+            for track_elem in tracklist_elem.findall('track'):
+                track_data = self._extract_track_data(track_elem)
+                if track_data:
+                    tracks.append(track_data)
+        return tracks
+    
+    def _extract_track_data(self, track_elem: ET.Element) -> Optional[Dict[str, Any]]:
+        """Extract track data from track element."""
+        try:
+            track_data = {}
+            
+            # Get position
+            position = self._safe_text(track_elem.find('position'))
+            if position:
+                track_data['position'] = position
+            
+            # Get title
+            title = self._safe_text(track_elem.find('title'))
+            if title:
+                track_data['title'] = title
+            
+            # Get duration
+            duration = self._safe_text(track_elem.find('duration'))
+            if duration:
+                track_data['duration'] = duration
+            
+            # Get type (track, index, heading, etc.)
+            track_type = track_elem.get('type')
+            if track_type:
+                track_data['type_'] = track_type  # Use 'type_' to avoid Python keyword
+            
+            return track_data if track_data else None
+            
+        except Exception as e:
+            logger.debug(f"Error extracting track data: {e}")
             return None
