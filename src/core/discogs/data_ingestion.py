@@ -46,6 +46,9 @@ class DataIngestionPipeline:
         self.populate_join_tables = ingestion_config.get('populate_join_tables', True)
         self.relationship_processor = get_relationship_processor() if self.populate_join_tables else None
         
+        # Track newly added releases for relationship processing
+        self.new_release_ids = []
+        
         # Parser mapping
         self.parsers = {
             'artists': ArtistXMLParser,
@@ -240,7 +243,10 @@ class DataIngestionPipeline:
         try:
             # Try to process the entire batch at once for better performance
             for record in batch:
-                session.merge(record)
+                merged_record = session.merge(record)
+                # Track releases for relationship processing
+                if dump_type == 'releases' and hasattr(record, 'id') and record.id not in self.new_release_ids:
+                    self.new_release_ids.append(record.id)
             processed = len(batch)
         except (IntegrityError, SQLAlchemyError) as e:
             # If batch processing fails, process records individually
@@ -250,8 +256,13 @@ class DataIngestionPipeline:
             for record in batch:
                 try:
                     # Start a new transaction for each record
-                    session.merge(record)
+                    merged_record = session.merge(record)
                     session.flush()  # Flush to catch errors early
+                    
+                    # Track releases for relationship processing
+                    if dump_type == 'releases' and hasattr(record, 'id') and record.id not in self.new_release_ids:
+                        self.new_release_ids.append(record.id)
+                    
                     processed += 1
                 except IntegrityError as e:
                     logger.debug(f"Integrity error for {dump_type} record {getattr(record, 'id', 'unknown')}: {e}")
@@ -383,17 +394,23 @@ class DataIngestionPipeline:
         Returns:
             Dictionary with processing statistics
         """
-        if not self.relationship_processor:
+        if not self.relationship_processor or not self.new_release_ids:
             return {}
         
         try:
-            # Process all releases (for now - could be optimized to only process recent ones)
-            stats = self.relationship_processor.process_existing_releases(session, batch_size)
+            # Process only newly added releases for efficiency
+            commit_interval = self.config.get('ingestion', {}).get('commit_interval', 1000)
+            stats = self.relationship_processor.process_releases_by_ids(
+                session, self.new_release_ids, commit_interval
+            )
             
             logger.info(f"Relationship processing complete: {stats}")
             click.echo(f"✅ Created {stats['artists_created']:,} artist relationships, "
                       f"{stats['labels_created']:,} label relationships, "
                       f"{stats['tracks_created']:,} tracks")
+            
+            # Clear the list after processing
+            self.new_release_ids.clear()
             
             return stats
             
