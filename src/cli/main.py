@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from ..core.discogs.xml_downloader import DiscogsDumpDownloader
 from ..core.discogs.data_ingestion import get_ingestion_pipeline
 from ..core.discogs.collection_sync import CollectionSync
 from ..core.database.database import init_database
+from ..core.analytics.analytics_engine import AnalyticsEngine, OutputFormatter
 
 
 @click.group()
@@ -66,6 +68,7 @@ def init(ctx):
     click.echo("2. Run 'discostar download-dumps' to fetch Discogs data")
     click.echo("3. Run 'discostar ingest-data' to import XML data into database")
     click.echo("4. Run 'discostar sync-collection' to sync your personal collection")
+    click.echo("5. Run 'discostar analytics' to analyze your collection")
 
 
 @cli.command('download-dumps')
@@ -602,6 +605,174 @@ def optimize_db(ctx, strategy, clean_unused):
             
     except Exception as e:
         click.echo(f"❌ Error optimizing database: {e}")
+        sys.exit(1)
+
+
+@cli.command('analytics')
+@click.option('--type', 'analysis_type',
+              type=click.Choice([
+                  'summary', 'decades', 'top-artists', 'top-labels', 'longest-tracks',
+                  'multiple-copies', 'genres', 'formats', 'years', 'collaborations', 'all'
+              ]),
+              default='summary', help='Type of analysis to run')
+@click.option('--format', 'output_format',
+              type=click.Choice(['human', 'csv', 'json']),
+              default='human', help='Output format')
+@click.option('--limit', type=int, default=20, help='Limit number of results')
+@click.option('--artist1', help='First artist name for collaboration analysis')
+@click.option('--artist2', help='Second artist name for collaboration analysis')
+@click.option('--output', '-o', type=click.Path(), help='Output file (default: stdout)')
+@click.pass_context
+def analytics(ctx, analysis_type, output_format, limit, artist1, artist2, output):
+    """Run analytics on your music collection."""
+    config = ctx.obj['config']
+    
+    try:
+        # Check if collection data exists
+        from ..core.database.models import UserCollection
+        from ..core.database.database import get_database_url
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        
+        database_url = get_database_url(config)
+        engine = create_engine(database_url)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        session = SessionLocal()
+        
+        try:
+            collection_count = session.query(UserCollection).count()
+            if collection_count == 0:
+                click.echo("❌ No collection data found. Sync your collection first with:")
+                click.echo("   discostar sync-collection")
+                return
+        finally:
+            session.close()
+        
+        # Initialize analytics engine
+        analytics_engine = AnalyticsEngine(config)
+        
+        # Run analysis based on type
+        results = []
+        title = ""
+        
+        if analysis_type == 'summary' or analysis_type == 'all':
+            summary = analytics_engine.collection_summary()
+            if output_format == 'human':
+                results.append(OutputFormatter.format_summary(summary))
+            elif output_format == 'json':
+                results.append(json.dumps(summary, indent=2, default=str))
+            elif output_format == 'csv':
+                # Convert summary to list format for CSV
+                summary_list = [{'metric': k, 'value': v} for k, v in summary.items()]
+                results.append(OutputFormatter.format_csv(summary_list))
+        
+        if analysis_type == 'decades' or analysis_type == 'all':
+            data = analytics_engine.favorite_decade()
+            title = "Collection by Decade"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'top-artists' or analysis_type == 'all':
+            data = analytics_engine.top_artists(limit)
+            title = f"Top {limit} Artists"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'top-labels' or analysis_type == 'all':
+            data = analytics_engine.releases_by_label(limit)
+            title = f"Top {limit} Labels"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'longest-tracks' or analysis_type == 'all':
+            data = analytics_engine.longest_tracks(limit)
+            title = f"Longest {limit} Tracks"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'multiple-copies' or analysis_type == 'all':
+            data = analytics_engine.multiple_copies(limit)
+            title = f"Albums with Multiple Copies"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'genres' or analysis_type == 'all':
+            data = analytics_engine.genre_analysis(limit)
+            title = f"Top {limit} Genres"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'formats' or analysis_type == 'all':
+            data = analytics_engine.format_analysis(limit)
+            title = f"Format Distribution"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'years' or analysis_type == 'all':
+            data = analytics_engine.year_analysis(limit)
+            title = f"Top {limit} Years"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        if analysis_type == 'collaborations':
+            if not artist1 or not artist2:
+                click.echo("❌ Collaboration analysis requires --artist1 and --artist2 parameters")
+                return
+            data = analytics_engine.artist_collaborations(artist1, artist2)
+            title = f"Collaborations: {artist1} & {artist2}"
+            if output_format == 'human':
+                results.append(OutputFormatter.format_human_readable(data, title))
+            elif output_format == 'csv':
+                results.append(OutputFormatter.format_csv(data))
+            elif output_format == 'json':
+                results.append(OutputFormatter.format_json(data))
+        
+        # Output results
+        final_output = '\n'.join(results)
+        
+        if output:
+            # Write to file
+            with open(output, 'w', encoding='utf-8') as f:
+                f.write(final_output)
+            click.echo(f"✅ Analytics results written to: {output}")
+        else:
+            # Output to stdout
+            click.echo(final_output)
+            
+    except Exception as e:
+        click.echo(f"❌ Analytics failed: {e}")
         sys.exit(1)
 
 

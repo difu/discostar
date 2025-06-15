@@ -12,6 +12,7 @@ A powerful Python CLI tool for analyzing your personal record collection using D
 - **Robust Error Handling**: Comprehensive error recovery with sub-1% error rates
 - **Local Database**: SQLite for development, with Azure PostgreSQL support for production
 - **CLI Interface**: Clean command-line interface for all operations
+- **Analytics Engine**: Comprehensive collection analysis with multiple output formats
 - **Web Interface**: Future Flask-based web dashboard (coming soon)
 - **Cloud Ready**: Terraform infrastructure for Azure deployment
 
@@ -67,8 +68,8 @@ discostar sync-collection
 # Check ingestion and sync status
 discostar status
 
-# Generate collection statistics (coming soon)
-discostar stats
+# Analyze your collection
+discostar analytics
 ```
 
 ## ⚡ Performance Metrics
@@ -300,15 +301,54 @@ discostar ingest-data --type releases
 discostar status  # Shows collection + master variant counts
 ```
 
-## 📊 Analytics Features (Coming Soon)
+## 📊 Analytics Features
 
-- **Genre Analysis**: Breakdown of your collection by genre and subgenre
-- **Timeline Visualization**: See how your collection spans different decades
-- **Label Statistics**: Most collected labels and their distribution
-- **Artist Insights**: Top artists in your collection
-- **Format Analysis**: Vinyl, CD, digital distribution
-- **Value Tracking**: Collection value trends over time
-- **Rarity Metrics**: Identify rare releases in your collection
+DiscoStar provides comprehensive analytics for your music collection with multiple output formats:
+
+### Available Analyses
+- **Collection Summary**: Overview statistics (total releases, artists, labels, year range)
+- **Decade Analysis**: Distribution by decade (prevents duplicate counting of same albums)
+- **Top Artists**: Most collected artists in your collection
+- **Top Labels**: Most collected record labels
+- **Longest Tracks**: Find the longest tracks in your collection
+- **Multiple Copies**: Identify albums where you own multiple variants/pressings
+- **Genre Analysis**: Breakdown by genre and subgenre
+- **Format Analysis**: Distribution by format (vinyl, CD, digital, etc.)
+- **Year Analysis**: Most collected years
+- **Artist Collaborations**: Find releases where two artists collaborated
+
+### Output Formats
+- **Human-readable**: Formatted tables for terminal display
+- **CSV**: For spreadsheet analysis and external visualization tools
+- **JSON**: For programmatic use and integration with other tools
+
+### Usage Examples
+
+```bash
+# Basic collection summary
+discostar analytics
+
+# Decade analysis with CSV output for visualization
+discostar analytics --type decades --format csv --output decades.csv
+
+# Top 10 artists in JSON format
+discostar analytics --type top-artists --limit 10 --format json
+
+# Find collaborations between Miles Davis and John Coltrane
+discostar analytics --type collaborations --artist1 "Miles Davis" --artist2 "John Coltrane"
+
+# Run all analyses and save comprehensive report
+discostar analytics --type all --output collection_report.txt
+
+# Export genre data for external analysis
+discostar analytics --type genres --format csv --limit 30 --output genres.csv
+```
+
+### Advanced Features
+- **Smart duplicate handling**: Decade analysis uses earliest release year for each master to prevent duplicate counting
+- **Flexible limits**: Customize result limits for top-N analyses
+- **File output**: Save results directly to files for further processing
+- **Real-time validation**: Checks for collection data before running analyses
 
 ## 🏗️ Architecture
 
@@ -341,6 +381,12 @@ discostar download-dumps          # Download all XML dumps
 discostar ingest-data            # Import XML data into database
 discostar sync-collection        # Sync your collection from Discogs API
 discostar status                 # Show database and sync status
+
+# Analytics commands
+discostar analytics                     # Basic collection summary
+discostar analytics --type all          # Run all available analyses
+discostar analytics --type decades --format csv  # Decade analysis as CSV
+discostar analytics --type collaborations --artist1 "Artist1" --artist2 "Artist2"
 
 # Collection sync options
 discostar sync-collection --force       # Force refresh of collection data
