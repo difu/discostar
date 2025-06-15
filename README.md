@@ -152,6 +152,10 @@ JOIN releases r ON t.release_id = r.id
 ORDER BY t.duration_seconds DESC LIMIT 10;
 
 -- Find favorite decade based on collection (earliest version of each master release only)
+-- - Groups your music collection by decade using the earliest release year for
+-- each album you own. This prevents duplicate counting when you own multiple pressings of the same album
+-- (e.g., original + remaster), giving you accurate statistics about
+-- which decades your music taste favors most.
  WITH earliest_releases AS (
       SELECT
           r.master_id,
@@ -205,6 +209,29 @@ ORDER BY t.duration_seconds DESC LIMIT 10;
       ROUND(100.0 * release_count / SUM(release_count) OVER(), 2) as percentage
   FROM decade_counts
   ORDER BY release_count DESC;
+
+-- Find releases where you own multiple copies - Identifies albums in your collection where you own more than one pressing or version. Groups by master release to show
+--  unique albums with multiple copies, helping you track duplicates, variants, and different pressings of the same album (e.g., original vinyl + remaster + special
+--  edition).
+
+  WITH duplicate_releases AS (
+      SELECT
+          r.master_id,
+          m.title as master_title,
+          COUNT(DISTINCT uc.release_id) as copy_count  -- COUNT DISTINCT release_ids
+      FROM releases r
+      INNER JOIN user_collection uc ON r.id = uc.release_id
+      INNER JOIN masters m ON r.master_id = m.id
+      WHERE r.master_id IS NOT NULL AND r.master_id > 0
+      GROUP BY r.master_id, m.title
+      HAVING COUNT(DISTINCT uc.release_id) > 1  -- Use DISTINCT here too
+  )
+  SELECT
+      master_title as release_name,
+      copy_count
+  FROM duplicate_releases
+  ORDER BY copy_count DESC, master_title
+  LIMIT 5;
 ```
 
 ## 💾 Storage Strategy
