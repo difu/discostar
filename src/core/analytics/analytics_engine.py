@@ -233,15 +233,16 @@ class AnalyticsEngine:
         """Analyze collection by genre."""
         query = """
         SELECT 
-            json_extract(value, '$') as genre,
+            value as genre,
             COUNT(DISTINCT uc.release_id) as release_count,
             ROUND(100.0 * COUNT(DISTINCT uc.release_id) / 
                   (SELECT COUNT(*) FROM user_collection), 2) as percentage
         FROM user_collection uc
         JOIN releases r ON uc.release_id = r.id,
-        json_each(json_extract(r.data, '$.genres'))
-        WHERE json_extract(r.data, '$.genres') IS NOT NULL
-        GROUP BY json_extract(value, '$')
+        json_each(r.genres)
+        WHERE r.genres IS NOT NULL
+        AND json_valid(r.genres) = 1
+        GROUP BY value
         ORDER BY COUNT(DISTINCT uc.release_id) DESC
         LIMIT :limit
         """
@@ -251,15 +252,16 @@ class AnalyticsEngine:
         """Analyze collection by format."""
         query = """
         SELECT 
-            json_extract(value, '$') as format,
+            json_extract(value, '$.name') as format,
             COUNT(DISTINCT uc.release_id) as release_count,
             ROUND(100.0 * COUNT(DISTINCT uc.release_id) / 
                   (SELECT COUNT(*) FROM user_collection), 2) as percentage
         FROM user_collection uc
         JOIN releases r ON uc.release_id = r.id,
-        json_each(json_extract(r.data, '$.formats'))
-        WHERE json_extract(r.data, '$.formats') IS NOT NULL
-        GROUP BY json_extract(value, '$')
+        json_each(r.formats)
+        WHERE r.formats IS NOT NULL
+        AND json_valid(r.formats) = 1
+        GROUP BY json_extract(value, '$.name')
         ORDER BY COUNT(DISTINCT uc.release_id) DESC
         LIMIT :limit
         """
