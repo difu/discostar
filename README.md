@@ -16,6 +16,56 @@ A powerful Python CLI tool for analyzing your personal record collection using D
 - **Web Interface**: Future Flask-based web dashboard (coming soon)
 - **Cloud Ready**: Terraform infrastructure for Azure deployment
 
+## 📊 Analytics Features
+
+DiscoStar provides comprehensive analytics for your music collection with multiple output formats:
+
+### Available Analyses
+- **Collection Summary**: Overview statistics (total releases, artists, labels, year range)
+- **Decade Analysis**: Distribution by decade (prevents duplicate counting of same albums)
+- **Top Artists**: Most collected artists in your collection
+- **Top Labels**: Most collected record labels
+- **Longest Tracks**: Find the longest tracks in your collection
+- **Multiple Copies**: Identify albums where you own multiple variants/pressings
+- **Genre Analysis**: Breakdown by genre and subgenre
+- **Format Analysis**: Distribution by format (vinyl, CD, digital, etc.)
+- **Year Analysis**: Most collected years
+- **Artist Collaborations**: Find releases where two artists collaborated
+
+### Output Formats
+- **Human-readable**: Formatted tables for terminal display
+- **CSV**: For spreadsheet analysis and external visualization tools
+- **JSON**: For programmatic use and integration with other tools
+
+### Usage Examples
+
+```bash
+# Basic collection summary
+discostar analytics
+
+# Decade analysis with CSV output for visualization
+discostar analytics --type decades --format csv --output decades.csv
+
+# Top 10 artists in JSON format
+discostar analytics --type top-artists --limit 10 --format json
+
+# Find collaborations between Miles Davis and John Coltrane
+discostar analytics --type collaborations --artist1 "Miles Davis" --artist2 "John Coltrane"
+
+# Run all analyses and save comprehensive report
+discostar analytics --type all --output collection_report.txt
+
+# Export genre data for external analysis
+discostar analytics --type genres --format csv --limit 30 --output genres.csv
+```
+
+### Advanced Features
+- **Smart duplicate handling**: Decade analysis uses earliest release year for each master to prevent duplicate counting
+- **Flexible limits**: Customize result limits for top-N analyses
+- **File output**: Save results directly to files for further processing
+- **Real-time validation**: Checks for collection data before running analyses
+
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -301,54 +351,6 @@ discostar ingest-data --type releases
 discostar status  # Shows collection + master variant counts
 ```
 
-## 📊 Analytics Features
-
-DiscoStar provides comprehensive analytics for your music collection with multiple output formats:
-
-### Available Analyses
-- **Collection Summary**: Overview statistics (total releases, artists, labels, year range)
-- **Decade Analysis**: Distribution by decade (prevents duplicate counting of same albums)
-- **Top Artists**: Most collected artists in your collection
-- **Top Labels**: Most collected record labels
-- **Longest Tracks**: Find the longest tracks in your collection
-- **Multiple Copies**: Identify albums where you own multiple variants/pressings
-- **Genre Analysis**: Breakdown by genre and subgenre
-- **Format Analysis**: Distribution by format (vinyl, CD, digital, etc.)
-- **Year Analysis**: Most collected years
-- **Artist Collaborations**: Find releases where two artists collaborated
-
-### Output Formats
-- **Human-readable**: Formatted tables for terminal display
-- **CSV**: For spreadsheet analysis and external visualization tools
-- **JSON**: For programmatic use and integration with other tools
-
-### Usage Examples
-
-```bash
-# Basic collection summary
-discostar analytics
-
-# Decade analysis with CSV output for visualization
-discostar analytics --type decades --format csv --output decades.csv
-
-# Top 10 artists in JSON format
-discostar analytics --type top-artists --limit 10 --format json
-
-# Find collaborations between Miles Davis and John Coltrane
-discostar analytics --type collaborations --artist1 "Miles Davis" --artist2 "John Coltrane"
-
-# Run all analyses and save comprehensive report
-discostar analytics --type all --output collection_report.txt
-
-# Export genre data for external analysis
-discostar analytics --type genres --format csv --limit 30 --output genres.csv
-```
-
-### Advanced Features
-- **Smart duplicate handling**: Decade analysis uses earliest release year for each master to prevent duplicate counting
-- **Flexible limits**: Customize result limits for top-N analyses
-- **File output**: Save results directly to files for further processing
-- **Real-time validation**: Checks for collection data before running analyses
 
 ## 🏗️ Architecture
 
