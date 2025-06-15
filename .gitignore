@@ -195,3 +195,4 @@ Thumbs.db
 
 # Azure
 *.publishsettings
+/internal_not_in_git/
