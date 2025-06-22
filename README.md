@@ -185,6 +185,8 @@ discostar status  # Shows join table counts
 ### Query Examples
 With join tables populated, you can run complex analytics:
 
+> **📋 For comprehensive SQL query examples**: See [`release_analysis_queries.md`](docs/release_analysis_queries.md) for detailed queries to identify original pressings, first presses, and country analysis with advantages/disadvantages for each approach.
+
 ```sql
 -- Find all releases where Artist X collaborated with Artist Y
 SELECT r.title FROM releases r
